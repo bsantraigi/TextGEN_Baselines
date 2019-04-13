@@ -7,7 +7,7 @@ TextGAN
 ## 152.3.214.203/6006
 
 import os
-GPUID = 1
+GPUID = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = str(GPUID)
 
 import tensorflow as tf
@@ -271,7 +271,7 @@ def run_model(opt, train, val, ixtoword):
         print('No embedding file found.')
         opt.fix_emb = False
 
-    with tf.device('/gpu:1'):
+    with tf.device('/gpu:0'):
         x_ = tf.placeholder(tf.int32, shape=[opt.batch_size, opt.sent_len])
         x_org_ = tf.placeholder(tf.int32, shape=[opt.batch_size, opt.sent_len])
         is_train_ = tf.placeholder(tf.bool, name='is_train_')
@@ -286,9 +286,10 @@ def run_model(opt, train, val, ixtoword):
 
 
     uidx = 0
-    config = tf.ConfigProto(log_device_placement = False, allow_soft_placement=True, graph_options=tf.GraphOptions(build_cost_model=1))
+    config = tf.ConfigProto(log_device_placement = False, allow_soft_placement=True,
+                            graph_options=tf.GraphOptions(build_cost_model=1))
     #config = tf.ConfigProto(device_count={'GPU':0})
-    config.gpu_options.per_process_gpu_memory_fraction = 0.4
+    config.gpu_options.allow_growth = True
     np.set_printoptions(precision=3)
     np.set_printoptions(threshold=np.inf)
     saver = tf.train.Saver()
@@ -317,14 +318,14 @@ def run_model(opt, train, val, ixtoword):
                 sess.run(tf.global_variables_initializer())
 
         for epoch in range(opt.max_epochs):
-            print("Starting epoch %d" % epoch)
+            print("\nStarting epoch %d\n" % epoch)
             # if epoch >= 10:
             #     print("Relax embedding ")
             #     opt.fix_emb = False
             #     opt.batch_size = 2
             kf = get_minibatches_idx(len(train), opt.batch_size, shuffle=True)
             for _, train_index in kf:
-                print(uidx)
+                print "\rIter: %d" % uidx,
                 uidx += 1
                 sents = [train[t] for t in train_index]
 
@@ -352,7 +353,7 @@ def run_model(opt, train, val, ixtoword):
 
                 if uidx % opt.valid_freq == 0:
                     is_train = True
-                    print('Valid Size:', len(val))
+                    # print('Valid Size:', len(val))
                     valid_index = np.random.choice(len(val), opt.batch_size)
 
                     val_sents = [val[t] for t in valid_index]
@@ -412,12 +413,21 @@ def main():
     # Prepare training and testing data
     #loadpath = "./data/three_corpus_small.p"
     # loadpath = "../../data/reddit/train/dialogues.txt"
-    loadpath = "./real_cotra.txt"
-    x = np.loadtxt(loadpath)
+    import cPickle
+    p = cPickle.load(open('./data/data.p', 'rb'))
+    print "Dataset size:", len(p)
+
+    #loadpath = "./real_cotra.txt"
+    #x = np.loadtxt(loadpath)
+    x = p[0] + p[1] + p[3]
     train, val = x[:88550], x[88550:]
-    ixtoword, _ = cPickle.load(open('vocab_cotra.pkl','rb'))
-    ixtoword = {i:x for i,x in enumerate(ixtoword)}
+    ixtoword, _ = cPickle.load(open('./data/vocab_cotra.pkl', 'rb'))
+    ixtoword = {i:x for i, x in enumerate(ixtoword)}
+
     opt = Options()
+    opt.valid_freq = 25
+    opt.print_freq = 25
+    opt.max_epochs = 500
 
     print dict(opt)
     print('Total words: %d' % opt.n_words)
